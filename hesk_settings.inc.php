@@ -146,8 +146,8 @@ $hesk_settings['kb_related']=0;
 // ==> EMAIL
 
 // --> Email sending
-$hesk_settings['noreply_mail']='support@example.com';
-$hesk_settings['noreply_name']='Help Desk';
+$hesk_settings['noreply_mail']='helpdesk@puskesmasbalaraja.com';
+$hesk_settings['noreply_name']='Helpdesk Puskesmas Balaraja';
 $hesk_settings['email_max_recipients']=50;
 $hesk_settings['email_formatting']=3;
 $hesk_settings['smtp']=0;
@@ -162,7 +162,7 @@ $hesk_settings['smtp_conn_type']='basic';
 $hesk_settings['smtp_oauth_provider']=0;
 
 // --> Email piping
-$hesk_settings['email_piping']=0;
+$hesk_settings['email_piping']=1;
 
 // --> IMAP Fetching
 $hesk_settings['imap']=0;
