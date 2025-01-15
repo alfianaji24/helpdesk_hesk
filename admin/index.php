@@ -1,4 +1,5 @@
 <?php
+
 /**
  *
  * This file is part of HESK - PHP Help Desk Software.
@@ -11,8 +12,8 @@
  *
  */
 
-define('IN_SCRIPT',1);
-define('HESK_PATH','../');
+define('IN_SCRIPT', 1);
+define('HESK_PATH', '../');
 
 /* Get all the required files and functions */
 require(HESK_PATH . 'hesk_settings.inc.php');
@@ -26,10 +27,9 @@ hesk_dbConnect();
 /* What should we do? */
 $action = hesk_REQUEST('a');
 
-switch ($action)
-{
+switch ($action) {
     case 'do_login':
-    	do_login();
+        do_login();
         break;
     case 'do_mfa_verification':
         do_mfa_verification();
@@ -41,14 +41,14 @@ switch ($action)
         do_backup_email_verification();
         break;
     case 'login':
-    	print_login();
+        print_login();
         break;
     case 'logout':
-    	logout();
+        logout();
         break;
     default:
-    	hesk_autoLogin();
-    	print_login();
+        hesk_autoLogin();
+        print_login();
 }
 
 /* Print footer */
@@ -58,113 +58,91 @@ exit();
 /*** START FUNCTIONS ***/
 function do_login()
 {
-	global $hesk_settings, $hesklang;
+    global $hesk_settings, $hesklang;
 
     $hesk_error_buffer = array();
 
-    $user = hesk_input( hesk_POST('user') );
-    if (empty($user))
-    {
-		$myerror = $hesk_settings['list_users'] ? $hesklang['select_username'] : $hesklang['enter_username'];
+    $user = hesk_input(hesk_POST('user'));
+    if (empty($user)) {
+        $myerror = $hesk_settings['list_users'] ? $hesklang['select_username'] : $hesklang['enter_username'];
         $hesk_error_buffer['user'] = $myerror;
     }
     define('HESK_USER', $user);
 
-	$pass = hesk_input( hesk_POST('pass') );
-	if (empty($pass))
-	{
-    	$hesk_error_buffer['pass'] = $hesklang['enter_pass'];
-	}
-    elseif (strlen($pass) > 64)
-    {
+    $pass = hesk_input(hesk_POST('pass'));
+    if (empty($pass)) {
+        $hesk_error_buffer['pass'] = $hesklang['enter_pass'];
+    } elseif (strlen($pass) > 64) {
         $hesk_error_buffer['pass'] = $hesklang['pass_len'];
     }
 
-	if ($hesk_settings['secimg_use'] == 2 && !isset($_SESSION['img_a_verified']))
-	{
-		// Using reCAPTCHA?
-		if ($hesk_settings['recaptcha_use'])
-		{
-			require(HESK_PATH . 'inc/recaptcha/recaptchalib_v2.php');
+    if ($hesk_settings['secimg_use'] == 2 && !isset($_SESSION['img_a_verified'])) {
+        // Using reCAPTCHA?
+        if ($hesk_settings['recaptcha_use']) {
+            require(HESK_PATH . 'inc/recaptcha/recaptchalib_v2.php');
 
-			$resp = null;
-			$reCaptcha = new ReCaptcha($hesk_settings['recaptcha_private_key']);
+            $resp = null;
+            $reCaptcha = new ReCaptcha($hesk_settings['recaptcha_private_key']);
 
-			// Was there a reCAPTCHA response?
-			if ( isset($_POST["g-recaptcha-response"]) )
-			{
-				$resp = $reCaptcha->verifyResponse(hesk_getClientIP(), hesk_POST("g-recaptcha-response") );
-			}
+            // Was there a reCAPTCHA response?
+            if (isset($_POST["g-recaptcha-response"])) {
+                $resp = $reCaptcha->verifyResponse(hesk_getClientIP(), hesk_POST("g-recaptcha-response"));
+            }
 
-			if ($resp != null && $resp->success)
-			{
-				$_SESSION['img_a_verified']=true;
-			}
-			else
-			{
-				$hesk_error_buffer['mysecnum']=$hesklang['recaptcha_error'];
-			}
-		}
-		// Using PHP generated image
-		else
-		{
-			$mysecnum = intval( hesk_POST('mysecnum', 0) );
+            if ($resp != null && $resp->success) {
+                $_SESSION['img_a_verified'] = true;
+            } else {
+                $hesk_error_buffer['mysecnum'] = $hesklang['recaptcha_error'];
+            }
+        }
+        // Using PHP generated image
+        else {
+            $mysecnum = intval(hesk_POST('mysecnum', 0));
 
-			if ( empty($mysecnum) )
-			{
-				$hesk_error_buffer['mysecnum'] = $hesklang['sec_miss'];
-			}
-			else
-			{
-				require(HESK_PATH . 'inc/secimg.inc.php');
-				$sc = new PJ_SecurityImage($hesk_settings['secimg_sum']);
-				if ( isset($_SESSION['checksum']) && $sc->checkCode($mysecnum, $_SESSION['checksum']) )
-				{
-					$_SESSION['img_a_verified'] = true;
+            if (empty($mysecnum)) {
+                $hesk_error_buffer['mysecnum'] = $hesklang['sec_miss'];
+            } else {
+                require(HESK_PATH . 'inc/secimg.inc.php');
+                $sc = new PJ_SecurityImage($hesk_settings['secimg_sum']);
+                if (isset($_SESSION['checksum']) && $sc->checkCode($mysecnum, $_SESSION['checksum'])) {
+                    $_SESSION['img_a_verified'] = true;
                     unset($_SESSION['checksum']);
-				}
-				else
-				{
-					$hesk_error_buffer['mysecnum'] = $hesklang['sec_wrng'];
-				}
-			}
-		}
-	}
-
-    /* Any missing fields? */
-	if (count($hesk_error_buffer)!=0)
-	{
-    	$_SESSION['a_iserror'] = array_keys($hesk_error_buffer);
-
-	    $tmp = '';
-	    foreach ($hesk_error_buffer as $error)
-	    {
-	        $tmp .= "<li>$error</li>\n";
-	    }
-	    $hesk_error_buffer = $tmp;
-
-	    $hesk_error_buffer = $hesklang['pcer'].'<br /><br /><ul>'.$hesk_error_buffer.'</ul>';
-	    hesk_process_messages($hesk_error_buffer,'NOREDIRECT');
-        print_login();
-        exit();
-	}
-    elseif (isset($_SESSION['img_a_verified']))
-    {
-		unset($_SESSION['img_a_verified']);
+                } else {
+                    $hesk_error_buffer['mysecnum'] = $hesklang['sec_wrng'];
+                }
+            }
+        }
     }
 
-	/* User entered all required info, now lets limit brute force attempts */
-	hesk_limitBfAttempts();
+    /* Any missing fields? */
+    if (count($hesk_error_buffer) != 0) {
+        $_SESSION['a_iserror'] = array_keys($hesk_error_buffer);
 
-	$result = hesk_dbQuery("SELECT * FROM `".hesk_dbEscape($hesk_settings['db_pfix'])."users` WHERE `user` = '".hesk_dbEscape($user)."' LIMIT 1");
-	if (hesk_dbNumRows($result) != 1)
-	{
-        hesk_session_stop();
-    	$_SESSION['a_iserror'] = array('user','pass');
-    	hesk_process_messages($hesklang['wrong_user'],'NOREDIRECT');
+        $tmp = '';
+        foreach ($hesk_error_buffer as $error) {
+            $tmp .= "<li>$error</li>\n";
+        }
+        $hesk_error_buffer = $tmp;
+
+        $hesk_error_buffer = $hesklang['pcer'] . '<br /><br /><ul>' . $hesk_error_buffer . '</ul>';
+        hesk_process_messages($hesk_error_buffer, 'NOREDIRECT');
         print_login();
         exit();
-	}
+    } elseif (isset($_SESSION['img_a_verified'])) {
+        unset($_SESSION['img_a_verified']);
+    }
+
+    /* User entered all required info, now lets limit brute force attempts */
+    hesk_limitBfAttempts();
+
+    $result = hesk_dbQuery("SELECT * FROM `" . hesk_dbEscape($hesk_settings['db_pfix']) . "users` WHERE `user` = '" . hesk_dbEscape($user) . "' LIMIT 1");
+    if (hesk_dbNumRows($result) != 1) {
+        hesk_session_stop();
+        $_SESSION['a_iserror'] = array('user', 'pass');
+        hesk_process_messages($hesklang['wrong_user'], 'NOREDIRECT');
+        print_login();
+        exit();
+    }
 
     $user_row = hesk_dbFetchAssoc($result);
 
@@ -172,16 +150,16 @@ function do_login()
     if (hesk_password_verify($pass, $user_row['pass'])) {
         if (hesk_password_needs_rehash($user_row['pass'])) {
             $user_row['pass'] = hesk_password_hash($pass);
-            hesk_dbQuery("UPDATE `".$hesk_settings['db_pfix']."users` SET `pass`='".hesk_dbEscape($user_row['pass'])."' WHERE `id`=".intval($user_row['id']));
+            hesk_dbQuery("UPDATE `" . $hesk_settings['db_pfix'] . "users` SET `pass`='" . hesk_dbEscape($user_row['pass']) . "' WHERE `id`=" . intval($user_row['id']));
         }
     } elseif (hesk_Pass2Hash($pass) == $user_row['pass']) {
         // Legacy password, update it
         $user_row['pass'] = hesk_password_hash($pass);
-        hesk_dbQuery("UPDATE `".$hesk_settings['db_pfix']."users` SET `pass`='".hesk_dbEscape($user_row['pass'])."' WHERE `id`=".intval($user_row['id']));
+        hesk_dbQuery("UPDATE `" . $hesk_settings['db_pfix'] . "users` SET `pass`='" . hesk_dbEscape($user_row['pass']) . "' WHERE `id`=" . intval($user_row['id']));
     } else {
         hesk_session_stop();
         $_SESSION['a_iserror'] = array('pass');
-        hesk_process_messages($hesklang['wrong_pass'],'NOREDIRECT');
+        hesk_process_messages($hesklang['wrong_pass'], 'NOREDIRECT');
         print_login();
         exit();
     }
@@ -227,13 +205,15 @@ function do_login()
     exit();
 } // End do_login()
 
-function do_mfa_verification() {
+function do_mfa_verification()
+{
     global $hesk_settings, $hesklang;
 
     require(HESK_PATH . 'inc/mfa_functions.inc.php');
 
     if (($_SESSION['mfa_verify_option'] === 1 && !is_mfa_email_code_valid($_SESSION['id'], hesk_POST('verification-code'))) ||
-        ($_SESSION['mfa_verify_option'] === 2 && !is_mfa_app_code_valid($_SESSION['id'], hesk_POST('verification-code')))) {
+        ($_SESSION['mfa_verify_option'] === 2 && !is_mfa_app_code_valid($_SESSION['id'], hesk_POST('verification-code')))
+    ) {
         hesk_process_messages($hesklang['mfa_invalid_verification_code'], 'NOREDIRECT');
         // Invalid attempts increase the lockout limit
         hesk_limitBfAttempts();
@@ -245,15 +225,17 @@ function do_mfa_verification() {
     set_session_and_process_login();
 }
 
-function set_session_and_process_login() {
+function set_session_and_process_login()
+{
     global $hesk_settings;
 
-    $result = hesk_dbQuery("SELECT * FROM `".hesk_dbEscape($hesk_settings['db_pfix'])."users` WHERE `user` = '".hesk_dbEscape($_SESSION['HESK_USER'])."' LIMIT 1");
+    $result = hesk_dbQuery("SELECT * FROM `" . hesk_dbEscape($hesk_settings['db_pfix']) . "users` WHERE `user` = '" . hesk_dbEscape($_SESSION['HESK_USER']) . "' LIMIT 1");
     $res = hesk_dbFetchAssoc($result);
     process_successful_login($res);
 }
 
-function do_backup_code_verification() {
+function do_backup_code_verification()
+{
     global $hesklang;
 
     require(HESK_PATH . 'inc/mfa_functions.inc.php');
@@ -270,7 +252,8 @@ function do_backup_code_verification() {
     set_session_and_process_login();
 }
 
-function process_successful_login($user_row) {
+function process_successful_login($user_row)
+{
     global $hesk_settings, $hesklang;
 
     // User authenticated, let's regenerate the session ID
@@ -296,67 +279,60 @@ function process_successful_login($user_row) {
     $current_time = new DateTime();
     $interval_amount = $hesk_settings['elevator_duration'];
     if (in_array(substr($interval_amount, -1), array('M', 'H'))) {
-        $interval_amount = 'T'.$interval_amount;
+        $interval_amount = 'T' . $interval_amount;
     }
     $elevation_expiration = $current_time->add(new DateInterval("P{$interval_amount}"));
     $_SESSION['elevated'] = $elevation_expiration;
 
-	/* Remember username? */
-	if ($hesk_settings['autologin'] && hesk_POST('remember_user') == 'AUTOLOGIN')
-	{
+    /* Remember username? */
+    if ($hesk_settings['autologin'] && hesk_POST('remember_user') == 'AUTOLOGIN') {
         $selector = base64_encode(random_bytes(9));
         $authenticator = random_bytes(33);
-        hesk_dbQuery("INSERT INTO `".hesk_dbEscape($hesk_settings['db_pfix'])."auth_tokens` (`selector`,`token`,`user_id`,`user_type`,`expires`) VALUES ('".hesk_dbEscape($selector)."','".hesk_dbEscape(hash('sha256', $authenticator))."','".intval($_SESSION['id'])."','STAFF', NOW() + INTERVAL 1 YEAR)");
+        hesk_dbQuery("INSERT INTO `" . hesk_dbEscape($hesk_settings['db_pfix']) . "auth_tokens` (`selector`,`token`,`user_id`,`user_type`,`expires`) VALUES ('" . hesk_dbEscape($selector) . "','" . hesk_dbEscape(hash('sha256', $authenticator)) . "','" . intval($_SESSION['id']) . "','STAFF', NOW() + INTERVAL 1 YEAR)");
         hesk_setcookie('hesk_username', '');
-        hesk_setcookie('hesk_remember', $selector.':'.base64_encode($authenticator), strtotime('+1 year'));
-	}
-	elseif ( hesk_POST('remember_user') == 'JUSTUSER')
-	{
-		hesk_setcookie('hesk_username', $user_row['user'], strtotime('+1 year'));
-		hesk_setcookie('hesk_remember', '');
-	}
-	else
-	{
-		// Expire cookie if set otherwise
-		hesk_setcookie('hesk_username', '');
-		hesk_setcookie('hesk_remember', '');
-	}
+        hesk_setcookie('hesk_remember', $selector . ':' . base64_encode($authenticator), strtotime('+1 year'));
+    } elseif (hesk_POST('remember_user') == 'JUSTUSER') {
+        hesk_setcookie('hesk_username', $user_row['user'], strtotime('+1 year'));
+        hesk_setcookie('hesk_remember', '');
+    } else {
+        // Expire cookie if set otherwise
+        hesk_setcookie('hesk_username', '');
+        hesk_setcookie('hesk_remember', '');
+    }
 
     /* Close any old tickets here so Cron jobs aren't necessary */
-    if ($hesk_settings['autoclose'])
-    {
-        $revision = sprintf($hesklang['thist3'],hesk_date(),$hesklang['auto']);
-        $dt  = date('Y-m-d H:i:s',time() - $hesk_settings['autoclose']*86400);
+    if ($hesk_settings['autoclose']) {
+        $revision = sprintf($hesklang['thist3'], hesk_date(), $hesklang['auto']);
+        $dt  = date('Y-m-d H:i:s', time() - $hesk_settings['autoclose'] * 86400);
 
         // Notify customer of closed ticket?
-        if ($hesk_settings['notify_closed'])
-        {
+        if ($hesk_settings['notify_closed']) {
             // Get list of tickets
-            $result = hesk_dbQuery("SELECT * FROM `".$hesk_settings['db_pfix']."tickets` WHERE `status` = '2' AND `lastchange` <= '".hesk_dbEscape($dt)."' ");
-            if (hesk_dbNumRows($result) > 0)
-            {
+            $result = hesk_dbQuery("SELECT * FROM `" . $hesk_settings['db_pfix'] . "tickets` WHERE `status` = '2' AND `lastchange` <= '" . hesk_dbEscape($dt) . "' ");
+            if (hesk_dbNumRows($result) > 0) {
                 global $ticket;
 
                 // Load required functions?
-                if ( ! function_exists('hesk_notifyCustomer') )
-                {
+                if (! function_exists('hesk_notifyCustomer')) {
                     require(HESK_PATH . 'inc/email_functions.inc.php');
                 }
 
-                if ( ! function_exists('hesk_get_customers_for_ticket') )
-                {
+                if (! function_exists('hesk_get_customers_for_ticket')) {
                     require(HESK_PATH . 'inc/customer_accounts.inc.php');
                 }
 
-                while ($ticket = hesk_dbFetchAssoc($result))
-                {
+                while ($ticket = hesk_dbFetchAssoc($result)) {
                     $ticket['dt'] = hesk_date($ticket['dt'], true);
                     $ticket['lastchange'] = hesk_date($ticket['lastchange'], true);
                     $ticket['due_date'] = hesk_format_due_date($ticket['due_date']);
 
                     $customers = hesk_get_customers_for_ticket($ticket['id']);
-                    $customer_emails = array_map(function($customer) { return $customer['email']; }, $customers);
-                    $customer_names = array_map(function($customer) { return $customer['name']; }, $customers);
+                    $customer_emails = array_map(function ($customer) {
+                        return $customer['email'];
+                    }, $customers);
+                    $customer_names = array_map(function ($customer) {
+                        return $customer['name'];
+                    }, $customers);
 
                     $ticket['email'] = implode(';', $customer_emails);
                     $ticket['name'] = implode(';', $customer_names);
@@ -369,15 +345,16 @@ function process_successful_login($user_row) {
         }
 
         // Update ticket statuses and history in database
-        hesk_dbQuery("UPDATE `".$hesk_settings['db_pfix']."tickets` SET `status`='3', `closedat`=NOW(), `closedby`='-1', `history`=CONCAT(`history`,'".hesk_dbEscape($revision)."') WHERE `status` = '2' AND `lastchange` <= '".hesk_dbEscape($dt)."' ");
+        hesk_dbQuery("UPDATE `" . $hesk_settings['db_pfix'] . "tickets` SET `status`='3', `closedat`=NOW(), `closedby`='-1', `history`=CONCAT(`history`,'" . hesk_dbEscape($revision) . "') WHERE `status` = '2' AND `lastchange` <= '" . hesk_dbEscape($dt) . "' ");
     }
 
     /* Redirect to the destination page */
-    header('Location: ' . hesk_verifyGoto() );
+    header('Location: ' . hesk_verifyGoto());
     exit();
 }
 
-function do_backup_email_verification() {
+function do_backup_email_verification()
+{
     global $hesklang;
 
     // Let's limit the "Send another email" to max 3
@@ -407,29 +384,26 @@ function do_backup_email_verification() {
 
 function print_login()
 {
-	global $hesk_settings, $hesklang;
+    global $hesk_settings, $hesklang;
 
-	// Tell header to load reCaptcha API if needed
-	if ($hesk_settings['recaptcha_use'])
-	{
-		define('RECAPTCHA',1);
-	}
+    // Tell header to load reCaptcha API if needed
+    if ($hesk_settings['recaptcha_use']) {
+        define('RECAPTCHA', 1);
+    }
 
-    $hesk_settings['tmp_title'] = $hesk_settings['hesk_title'] . ' - ' .$hesklang['admin_login'];
-	require_once(HESK_PATH . 'inc/header.inc.php');
+    $hesk_settings['tmp_title'] = $hesk_settings['hesk_title'] . ' - ' . $hesklang['admin_login'];
+    require_once(HESK_PATH . 'inc/header.inc.php');
 
-	if ( hesk_isREQUEST('notice') )
-	{
-    	hesk_process_messages($hesklang['session_expired'],'NOREDIRECT');
-	}
+    if (hesk_isREQUEST('notice')) {
+        hesk_process_messages($hesklang['session_expired'], 'NOREDIRECT');
+    }
 
-    if (!isset($_SESSION['a_iserror']))
-    {
-    	$_SESSION['a_iserror'] = array();
+    if (!isset($_SESSION['a_iserror'])) {
+        $_SESSION['a_iserror'] = array();
     }
 
     $login_wrapper = true;
-	?>
+?>
     <div class="wrapper login">
         <main class="main">
             <div class="reg__wrap">
@@ -450,9 +424,9 @@ function print_login()
                                 <label for="regInputUsername"><?php echo $hesklang['username']; ?></label>
                                 <?php
 
-                                $cls = in_array('user',$_SESSION['a_iserror']) ? 'isError' : '';
+                                $cls = in_array('user', $_SESSION['a_iserror']) ? 'isError' : '';
 
-                                if ( defined('HESK_DEMO')) {
+                                if (defined('HESK_DEMO')) {
                                     $savedUser = 'Demo';
                                 } elseif (defined('HESK_USER')) {
                                     $savedUser = HESK_USER;
@@ -466,31 +440,24 @@ function print_login()
 
                                 $remember_user = hesk_POST('remember_user');
 
-                                if ($hesk_settings['autologin'] && (isset($_COOKIE['hesk_remember']) || $remember_user == 'AUTOLOGIN') )
-                                {
+                                if ($hesk_settings['autologin'] && (isset($_COOKIE['hesk_remember']) || $remember_user == 'AUTOLOGIN')) {
                                     $is_1 = 'checked';
-                                }
-                                elseif (isset($_COOKIE['hesk_username']) || $remember_user == 'JUSTUSER' )
-                                {
+                                } elseif (isset($_COOKIE['hesk_username']) || $remember_user == 'JUSTUSER') {
                                     $is_2 = 'checked';
-                                }
-                                else
-                                {
+                                } else {
                                     $is_3 = 'checked';
                                 }
 
                                 if ($hesk_settings['list_users']) {
-                                    echo '<select name="user" class="'.$cls.'">';
-                                    $res = hesk_dbQuery('SELECT `user` FROM `'.hesk_dbEscape($hesk_settings['db_pfix']).'users` ORDER BY `user` ASC');
-                                    while ($row=hesk_dbFetchAssoc($res))
-                                    {
+                                    echo '<select name="user" class="' . $cls . '">';
+                                    $res = hesk_dbQuery('SELECT `user` FROM `' . hesk_dbEscape($hesk_settings['db_pfix']) . 'users` ORDER BY `user` ASC');
+                                    while ($row = hesk_dbFetchAssoc($res)) {
                                         $sel = (hesk_mb_strtolower($savedUser) == hesk_mb_strtolower($row['user'])) ? 'selected="selected"' : '';
-                                        echo '<option value="'.$row['user'].'" '.$sel.'>'.$row['user'].'</option>';
+                                        echo '<option value="' . $row['user'] . '" ' . $sel . '>' . $row['user'] . '</option>';
                                     }
                                     echo '</select>';
-
                                 } else {
-                                    echo '<input type="text" class="form-control '.$cls.'" id="regInputUsername" name="user" value="'.$savedUser.'" autocomplete="off" required>';
+                                    echo '<input type="text" class="form-control ' . $cls . '" id="regInputUsername" name="user" value="' . $savedUser . '" autocomplete="off" required>';
                                 }
                                 ?>
                                 <div class="form-control__error"><?php echo $hesklang['this_field_is_required']; ?></div>
@@ -500,51 +467,67 @@ function print_login()
                                 <div class="input-group">
                                     <?php
                                     $class = 'class="form-control';
-                                    if (in_array('pass',$_SESSION['a_iserror'])) {
+                                    if (in_array('pass', $_SESSION['a_iserror'])) {
                                         $class .= ' isError';
                                     }
                                     $class .= '"';
                                     ?>
                                     <input type="password" name="pass" id="regInputPassword" <?php echo $class; ?>
-                                        <?php if (defined('HESK_DEMO')) {echo ' value="demo1"';} ?>>
+                                        <?php if (defined('HESK_DEMO')) {
+                                            echo ' value="demo1"';
+                                        } ?>>
                                     <div class="input-group-append--icon passwordIsHidden">
                                         <svg class="icon icon-eye-close">
                                             <use xlink:href="<?php echo HESK_PATH; ?>img/sprite.svg#icon-eye-close"></use>
                                         </svg>
                                     </div>
+
+                                </div>
+                                <div class="form-control__error"><?php echo $hesklang['this_field_is_required']; ?></div>
+                            </div>
+                            <div class="form-group">
+                                <!-- <label for="sec_miss"><?php echo $hesklang['sec_miss']; ?></label> -->
+                                <div class="input-group">
+                                    <label>Ketikkan angka yang Anda lihat pada gambar di bawah ini.</label>
+                                    <img src="../print_sec_img.php?14224" width="150" height="40" alt="Gambar keamanan" title="Gambar keamanan" border="1" name="secimg" style="vertical-align:middle">
+                                    <a style="vertical-align: middle; display: inline" class="btn btn-refresh" href="javascript:" onclick="document.form1.secimg.src='../print_sec_img.php?'+ ( Math.floor((90000)*Math.random()) + 10000);">
+                                        <svg class="icon icon-refresh">
+                                            <use xlink:href="../img/sprite.svg#icon-refresh"></use>
+                                        </svg>
+                                    </a>
+                                    <br>
+                                    <br>
+                                    <input type="text" name="mysecnum" size="20" maxlength="5" autocomplete="off" class="form-control isError">
                                 </div>
                                 <div class="form-control__error"><?php echo $hesklang['this_field_is_required']; ?></div>
                             </div>
                             <?php if ($hesk_settings['secimg_use'] == 2 && $hesk_settings['recaptcha_use'] != 1): ?>
-                            <div>
-                                <?php
-                                // SPAM prevention verified for this session
-                                if (isset($_SESSION['img_a_verified']))
-                                {
-                                    //-- No-op
-                                }
-                                // Use reCaptcha API v2?
-                                elseif ($hesk_settings['recaptcha_use'] == 2)
-                                {
-                                    ?>
-                                    <div class="g-recaptcha" data-sitekey="<?php echo $hesk_settings['recaptcha_public_key']; ?>"></div>
+                                <div>
                                     <?php
-                                }
-                                // At least use some basic PHP generated image (better than nothing)
-                                else
-                                {
-                                    $cls = in_array('mysecnum',$_SESSION['a_iserror']) ? ' class="form-control isError" ' : ' class="form-control" ';
+                                    // SPAM prevention verified for this session
+                                    if (isset($_SESSION['img_a_verified'])) {
+                                        //-- No-op
+                                    }
+                                    // Use reCaptcha API v2?
+                                    elseif ($hesk_settings['recaptcha_use'] == 2) {
+                                    ?>
+                                        <div class="g-recaptcha" data-sitekey="<?php echo $hesk_settings['recaptcha_public_key']; ?>"></div>
+                                    <?php
+                                    }
+                                    // At least use some basic PHP generated image (better than nothing)
+                                    else {
+                                        $cls = in_array('mysecnum', $_SESSION['a_iserror']) ? ' class="form-control isError" ' : ' class="form-control" ';
 
-                                    echo '<div class="form-group"><label>'.$hesklang['sec_enter'].'</label><img src="print_sec_img.php?'.rand(10000,99999).'" width="150" height="40" alt="'.$hesklang['sec_img'].'" title="'.$hesklang['sec_img'].'" border="1" name="secimg" style="vertical-align:middle" /> '.
-                                        '<a style="vertical-align: middle; display: inline" class="btn btn-refresh" href="javascript:" onclick="document.form1.secimg.src=\'print_sec_img.php?\'+ ( Math.floor((90000)*Math.random()) + 10000);">
+                                        echo '<div class="form-group"><label>' . $hesklang['sec_enter'] . '</label><img src="print_sec_img.php?' . rand(10000, 99999) . '" width="150" height="40" alt="' . $hesklang['sec_img'] . '" title="' . $hesklang['sec_img'] . '" border="1" name="secimg" style="vertical-align:middle" /> ' .
+                                            '<a style="vertical-align: middle; display: inline" class="btn btn-refresh" href="javascript:" onclick="document.form1.secimg.src=\'print_sec_img.php?\'+ ( Math.floor((90000)*Math.random()) + 10000);">
                                             <svg class="icon icon-refresh">
                                                 <use xlink:href="' . HESK_PATH . 'img/sprite.svg#icon-refresh"></use>
                                             </svg>
-                                         </a>'.
-                                        '<br><br><input type="text" name="mysecnum" size="20" maxlength="5" autocomplete="off" '.$cls.'></div>';
-                                }
-                                ?>
-                            </div>
+                                         </a>' .
+                                            '<br><br><input type="text" name="mysecnum" size="20" maxlength="5" autocomplete="off" ' . $cls . '></div>';
+                                    }
+                                    ?>
+                                </div>
                             <?php
                             endif;
                             if ($hesk_settings['autologin']):
@@ -581,9 +564,8 @@ function print_login()
                                 </button>
                                 <input type="hidden" name="a" value="do_login">
                                 <?php
-                                if (hesk_isREQUEST('goto') && $url=hesk_REQUEST('goto'))
-                                {
-                                    echo '<input type="hidden" name="goto" value="'.$url.'">';
+                                if (hesk_isREQUEST('goto') && $url = hesk_REQUEST('goto')) {
+                                    echo '<input type="hidden" name="goto" value="' . $url . '">';
                                 }
                                 ?>
                             </div>
@@ -603,30 +585,29 @@ function print_login()
                 </div>
             </div>
 
-        <script>
-        $(() => {
-            $('form :visible[class*=isError]:first').focus();
-        })
-        </script>
-	<?php
-	hesk_cleanSessionVars('a_iserror');
+            <script>
+                $(() => {
+                    $('form :visible[class*=isError]:first').focus();
+                })
+            </script>
+        <?php
+        hesk_cleanSessionVars('a_iserror');
 
-    require_once(HESK_PATH . 'inc/footer.inc.php');
-    exit();
-} // End print_login()
+        require_once(HESK_PATH . 'inc/footer.inc.php');
+        exit();
+    } // End print_login()
 
-function print_mfa_verification()
-{
-    global $hesk_settings, $hesklang;
-
-    $hesk_settings['tmp_title'] = $hesk_settings['hesk_title'] . ' - ' .$hesklang['admin_login'];
-    require_once(HESK_PATH . 'inc/header.inc.php');
-
-    if (!isset($_SESSION['a_iserror']))
+    function print_mfa_verification()
     {
-        $_SESSION['a_iserror'] = array();
-    }
-    ?>
+        global $hesk_settings, $hesklang;
+
+        $hesk_settings['tmp_title'] = $hesk_settings['hesk_title'] . ' - ' . $hesklang['admin_login'];
+        require_once(HESK_PATH . 'inc/header.inc.php');
+
+        if (!isset($_SESSION['a_iserror'])) {
+            $_SESSION['a_iserror'] = array();
+        }
+        ?>
             <div class="wrapper login">
                 <main class="main">
                     <div class="reg__wrap">
@@ -637,49 +618,48 @@ function print_mfa_verification()
                             <div class="reg__box">
                                 <h2 class="reg__heading"><?php echo $hesklang['mfa']; ?></h2>
                                 <div id="mfa-verify">
-                                <div style="margin-right: -24px; margin-left: -16px">
-                                    <?php
-                                    /* This will handle error, success and notice messages */
-                                    hesk_handle_messages();
-                                    ?>
-                                </div>
-                                <form action="index.php" class="form <?php echo isset($_SESSION['a_iserror']) && count($_SESSION['a_iserror']) ? 'invalid' : ''; ?>" id="form1" method="post" name="form1" novalidate>
-                                    <div class="form-group" id="verification-code-group">
-                                        <label for="verificationCode"><?php echo $hesklang['mfa_verification_code']; ?></label>
+                                    <div style="margin-right: -24px; margin-left: -16px">
                                         <?php
-                                        $cls = in_array('user',$_SESSION['a_iserror']) ? 'isError' : '';
-                                        ?>
-                                        <input type="text" class="form-control <?php echo $cls; ?>" id="verificationCode" name="verification-code" autocomplete="off" maxlength="6" required>
-                                        <div class="form-control__error"><?php echo $hesklang['this_field_is_required']; ?></div>
-                                    </div>
-                                    <div class="form__submit mfa">
-                                        <button class="btn btn-full" ripple="ripple" type="submit" id="verify-submit">
-                                            <?php echo $hesklang['mfa_verify']; ?>
-                                        </button>
-                                        <input type="hidden" name="a" value="do_mfa_verification">
-                                        <input type="hidden" name="remember_user" value="<?php echo stripslashes(hesk_input($_SESSION['remember_user_form_val'])); ?>">
-                                        <?php
-
-                                        if (hesk_isREQUEST('goto') && $url=hesk_REQUEST('goto'))
-                                        {
-                                            echo '<input type="hidden" name="goto" value="'.$url.'">';
-                                        }
+                                        /* This will handle error, success and notice messages */
+                                        hesk_handle_messages();
                                         ?>
                                     </div>
-                                </form>
+                                    <form action="index.php" class="form <?php echo isset($_SESSION['a_iserror']) && count($_SESSION['a_iserror']) ? 'invalid' : ''; ?>" id="form1" method="post" name="form1" novalidate>
+                                        <div class="form-group" id="verification-code-group">
+                                            <label for="verificationCode"><?php echo $hesklang['mfa_verification_code']; ?></label>
+                                            <?php
+                                            $cls = in_array('user', $_SESSION['a_iserror']) ? 'isError' : '';
+                                            ?>
+                                            <input type="text" class="form-control <?php echo $cls; ?>" id="verificationCode" name="verification-code" autocomplete="off" maxlength="6" required>
+                                            <div class="form-control__error"><?php echo $hesklang['this_field_is_required']; ?></div>
+                                        </div>
+                                        <div class="form__submit mfa">
+                                            <button class="btn btn-full" ripple="ripple" type="submit" id="verify-submit">
+                                                <?php echo $hesklang['mfa_verify']; ?>
+                                            </button>
+                                            <input type="hidden" name="a" value="do_mfa_verification">
+                                            <input type="hidden" name="remember_user" value="<?php echo stripslashes(hesk_input($_SESSION['remember_user_form_val'])); ?>">
+                                            <?php
 
-                                <?php if ($_SESSION['mfa_verify_option'] === 1): ?>
-                                    &nbsp;
-                                    <form action="index.php" class="form <?php echo isset($_SESSION['a_iserror']) && count($_SESSION['a_iserror']) ? 'invalid' : ''; ?>" id="send-another-email-form" method="post" name="send-another-email-form" novalidate>
-                                        <button class="btn btn-link" type="submit">
-                                            <?php echo $hesklang['mfa_send_another_email']; ?>
-                                        </button>
-                                        <input type="hidden" name="a" value="backup_email">
-                                        <input type="hidden" name="remember_user" value="<?php echo stripslashes(hesk_input($_SESSION['remember_user_form_val'])); ?>">
+                                            if (hesk_isREQUEST('goto') && $url = hesk_REQUEST('goto')) {
+                                                echo '<input type="hidden" name="goto" value="' . $url . '">';
+                                            }
+                                            ?>
+                                        </div>
                                     </form>
-                                <?php
-                                endif;
-                                ?>
+
+                                    <?php if ($_SESSION['mfa_verify_option'] === 1): ?>
+                                        &nbsp;
+                                        <form action="index.php" class="form <?php echo isset($_SESSION['a_iserror']) && count($_SESSION['a_iserror']) ? 'invalid' : ''; ?>" id="send-another-email-form" method="post" name="send-another-email-form" novalidate>
+                                            <button class="btn btn-link" type="submit">
+                                                <?php echo $hesklang['mfa_send_another_email']; ?>
+                                            </button>
+                                            <input type="hidden" name="a" value="backup_email">
+                                            <input type="hidden" name="remember_user" value="<?php echo stripslashes(hesk_input($_SESSION['remember_user_form_val'])); ?>">
+                                        </form>
+                                    <?php
+                                    endif;
+                                    ?>
                                     &nbsp;<br>
                                     <a href="javascript:hesk_toggleLayerDisplay('verify-another-way');hesk_toggleLayerDisplay('mfa-verify')">
                                         <?php echo $hesklang['mfa_verify_another_way']; ?>
@@ -690,24 +670,24 @@ function print_mfa_verification()
                                     &nbsp;
                                     <ul>
                                         <?php if ($_SESSION['mfa_verify_option'] === 2): ?>
-                                        <li>
-                                            <div class="flex">
-                                                <div class="mfa-alt-icon" aria-hidden="true">
-                                                    <svg class="icon icon-mail">
-                                                        <use xlink:href="<?php echo HESK_PATH; ?>img/sprite.svg#icon-mail"></use>
-                                                    </svg>
+                                            <li>
+                                                <div class="flex">
+                                                    <div class="mfa-alt-icon" aria-hidden="true">
+                                                        <svg class="icon icon-mail">
+                                                            <use xlink:href="<?php echo HESK_PATH; ?>img/sprite.svg#icon-mail"></use>
+                                                        </svg>
+                                                    </div>
+                                                    <div class="mfa-alt-text">
+                                                        <form action="index.php" class="form <?php echo isset($_SESSION['a_iserror']) && count($_SESSION['a_iserror']) ? 'invalid' : ''; ?>" id="email-backup-form" method="post" name="email-backup-form" novalidate>
+                                                            <button class="btn btn-link" type="submit">
+                                                                <?php echo sprintf($hesklang['mfa_verify_another_way_email'], hesk_maskEmailAddress($_SESSION['email'])); ?>
+                                                            </button>
+                                                            <input type="hidden" name="a" value="backup_email">
+                                                            <input type="hidden" name="remember_user" value="<?php echo stripslashes(hesk_input($_SESSION['remember_user_form_val'])); ?>">
+                                                        </form>
+                                                    </div>
                                                 </div>
-                                                <div class="mfa-alt-text">
-                                                    <form action="index.php" class="form <?php echo isset($_SESSION['a_iserror']) && count($_SESSION['a_iserror']) ? 'invalid' : ''; ?>" id="email-backup-form" method="post" name="email-backup-form" novalidate>
-                                                        <button class="btn btn-link" type="submit">
-                                                            <?php echo sprintf($hesklang['mfa_verify_another_way_email'], hesk_maskEmailAddress($_SESSION['email'])); ?>
-                                                        </button>
-                                                        <input type="hidden" name="a" value="backup_email">
-                                                        <input type="hidden" name="remember_user" value="<?php echo stripslashes(hesk_input($_SESSION['remember_user_form_val'])); ?>">
-                                                    </form>
-                                                </div>
-                                            </div>
-                                        </li>
+                                            </li>
                                         <?php endif; ?>
                                         <li>
                                             <div class="flex">
@@ -733,9 +713,8 @@ function print_mfa_verification()
                                                             <input type="hidden" name="remember_user" value="<?php echo stripslashes(hesk_input($_SESSION['remember_user_form_val'])); ?>">
                                                             <?php
 
-                                                            if (hesk_isREQUEST('goto') && $url=hesk_REQUEST('goto'))
-                                                            {
-                                                                echo '<input type="hidden" name="goto" value="'.$url.'">';
+                                                            if (hesk_isREQUEST('goto') && $url = hesk_REQUEST('goto')) {
+                                                                echo '<input type="hidden" name="goto" value="' . $url . '">';
                                                             }
                                                             ?>
                                                         </form>
@@ -744,18 +723,18 @@ function print_mfa_verification()
                                             </div>
                                         </li>
                                         <?php if (hesk_isThereAnotherAdmin($_SESSION['id'])): ?>
-                                        <li>
-                                            <div class="flex">
-                                                <div class="mfa-alt-icon" aria-hidden="true">
-                                                    <svg class="icon icon-assign">
-                                                        <use xlink:href="<?php echo HESK_PATH; ?>img/sprite.svg#icon-assign"></use>
-                                                    </svg>
+                                            <li>
+                                                <div class="flex">
+                                                    <div class="mfa-alt-icon" aria-hidden="true">
+                                                        <svg class="icon icon-assign">
+                                                            <use xlink:href="<?php echo HESK_PATH; ?>img/sprite.svg#icon-assign"></use>
+                                                        </svg>
+                                                    </div>
+                                                    <div class="mfa-alt-text">
+                                                        <?php echo $hesklang['mfa_verify_another_way_admin']; ?>
+                                                    </div>
                                                 </div>
-                                                <div class="mfa-alt-text">
-                                                    <?php echo $hesklang['mfa_verify_another_way_admin']; ?>
-                                                </div>
-                                            </div>
-                                        </li>
+                                            </li>
                                         <?php endif; ?>
                                         <li>
                                             <div class="flex">
@@ -811,53 +790,51 @@ function print_mfa_verification()
                                 .addClass('disabled');
                         });
                     </script>
-<?php
-hesk_cleanSessionVars('a_iserror');
+                <?php
+                hesk_cleanSessionVars('a_iserror');
 
-require_once(HESK_PATH . 'inc/footer.inc.php');
-exit();
-} // End print_mfa_verification()
+                require_once(HESK_PATH . 'inc/footer.inc.php');
+                exit();
+            } // End print_mfa_verification()
 
 
-function logout() {
-	global $hesk_settings, $hesklang;
+            function logout()
+            {
+                global $hesk_settings, $hesklang;
 
-    if ( ! hesk_token_check('GET', 0))
-    {
-		print_login();
-        exit();
-    }
+                if (! hesk_token_check('GET', 0)) {
+                    print_login();
+                    exit();
+                }
 
-    /* Delete from Who's online database */
-	if ($hesk_settings['online'])
-	{
-    	require(HESK_PATH . 'inc/users_online.inc.php');
-		hesk_setOffline($_SESSION['id']);
-	}
+                /* Delete from Who's online database */
+                if ($hesk_settings['online']) {
+                    require(HESK_PATH . 'inc/users_online.inc.php');
+                    hesk_setOffline($_SESSION['id']);
+                }
 
-    // Clear users' authentication tokens
-    hesk_dbQuery("DELETE FROM `".hesk_dbEscape($hesk_settings['db_pfix'])."auth_tokens` WHERE `user_id` = ".intval($_SESSION['id']));
-    hesk_dbQuery("DELETE FROM `".hesk_dbEscape($hesk_settings['db_pfix'])."mfa_verification_tokens` 
-        WHERE `user_id` = ".intval($_SESSION['id'])."
+                // Clear users' authentication tokens
+                hesk_dbQuery("DELETE FROM `" . hesk_dbEscape($hesk_settings['db_pfix']) . "auth_tokens` WHERE `user_id` = " . intval($_SESSION['id']));
+                hesk_dbQuery("DELETE FROM `" . hesk_dbEscape($hesk_settings['db_pfix']) . "mfa_verification_tokens` 
+        WHERE `user_id` = " . intval($_SESSION['id']) . "
         AND `user_type` = 'STAFF'");
 
-    /* Destroy session and cookies */
-	hesk_session_stop();
+                /* Destroy session and cookies */
+                hesk_session_stop();
 
-    /* If we're using the security image for admin login start a new session */
-	if ($hesk_settings['secimg_use'] == 2)
-    {
-    	hesk_session_start();
-    }
+                /* If we're using the security image for admin login start a new session */
+                if ($hesk_settings['secimg_use'] == 2) {
+                    hesk_session_start();
+                }
 
-	/* Show success message and reset the cookie */
-    hesk_process_messages($hesklang['logout_success'],'NOREDIRECT','SUCCESS');
-    hesk_setcookie('hesk_username', '');
-    hesk_setcookie('hesk_remember', '');
+                /* Show success message and reset the cookie */
+                hesk_process_messages($hesklang['logout_success'], 'NOREDIRECT', 'SUCCESS');
+                hesk_setcookie('hesk_username', '');
+                hesk_setcookie('hesk_remember', '');
 
-    /* Print the login form */
-	print_login();
-	exit();
-} // End logout()
+                /* Print the login form */
+                print_login();
+                exit();
+            } // End logout()
 
-?>
+                ?>
